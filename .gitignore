@@ -36,3 +36,11 @@
 
 # VSCode folders
 *.vscode
+
+# Catkin
+.catkin_tools/
+devel/
+
+# Build folders
+build/
+logs/
