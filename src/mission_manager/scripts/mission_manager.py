@@ -44,9 +44,10 @@ class MissionManager:
 		rospy.Subscriber("mavros/local_position/pose", PoseStamped, self.pose_cb)
 
 		# Mission targets
-		self.takeoff_height = 3.0
-		self.landing_height = 0.0
-		self.gps_position = (10.0, 5.0)
+		# Mission targets (now loaded from ROS params)
+		self.takeoff_height = rospy.get_param("~takeoff_height")
+		self.landing_height = rospy.get_param("~landing_height")
+		self.gps_position = tuple(rospy.get_param("~gps_position"))
 
 		# Begin main loop
 		self.run_mission()
