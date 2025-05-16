@@ -52,6 +52,9 @@ class MissionManager:
 		self.target_tolerance = tolerance
 		self.target_reached = False
 
+		self.drone.publish_position(x, y, z)
+		#self.drone.publish_velocity_to_target(tx, ty, tz)
+
 		rospy.loginfo("New target set: (%.2f, %.2f, %.2f) with tolerance %.2f" % (x, y, z, tolerance))
 
 	def update_target_status(self):
@@ -75,9 +78,6 @@ class MissionManager:
 
 			rospy.loginfo("Target reached")
 			return True
-
-		self.drone.publish_position(tx, ty, tz)
-		self.drone.publish_velocity_to_target(tx, ty, tz)
 
 		# Log distance periodically
 		current_time = rospy.Time.now().to_sec()
@@ -117,7 +117,7 @@ class MissionManager:
 	def change_state(self, new_state, msg=""):
 		"""Change the current state and log the transition"""
 		if new_state != self.current_state:
-			rospy.loginfo("State changed from %s to %s: %s" % (self.current_state.name, new_state.name, msg))
+			rospy.loginfo(msg)
 			self.current_state = new_state
 			self.target_reached = False
 
@@ -147,6 +147,7 @@ class MissionManager:
 			return
 
 		elif self.target_reached:
+			self.drone.set_mode("AUTO")
 			self.change_state(MissionState.NAVIGATE, "Takeoff complete")
 
 		elif self.current_target is None:
@@ -163,6 +164,7 @@ class MissionManager:
 		"""Handle the NAVIGATE state - fly to GPS target"""
 
 		if self.target_reached:
+			self.drone.set_mode("QLAND")
 			self.change_state(MissionState.LANDING, "Navigation complete")
 
 		elif self.current_target is None:
@@ -173,9 +175,11 @@ class MissionManager:
 		"""Handle the LANDING state - land using tag or fallback"""
 
 		if not self.drone.tag_visible:
-			rospy.loginfo("Tag not visible - switching to QLAND")
-			self.drone.set_mode("QLAND")
-			self.current_state = MissionState.COMPLETE
+			x, y, z = self.drone.get_current_position()
+			if z < self.landing_height:
+				rospy.loginfo("Landing complete")
+				self.current_state = MissionState.COMPLETE
+				return
 			return
 
 		tag_offset = self.drone.get_tag_offset()
@@ -205,9 +209,8 @@ class MissionManager:
     	# Landing condition
 		if abs(x_err) < 0.1 and abs(y_err) < 0.1 and altitude < self.landing_height:
 			rospy.loginfo("Landed successfully over tag")
-			self.drone.set_mode("LAND")
+			self.drone.set_mode("QLAND")
 			self.current_state = MissionState.COMPLETE
-
 
 	def run_mission(self):
 		"""Main mission execution loop"""
@@ -219,7 +222,6 @@ class MissionManager:
 		while not rospy.is_shutdown() and self.current_state != MissionState.COMPLETE:
 			self.drone.disable_manual_input()
 			self.update_target_status()
-		
 
 			if self.current_state == MissionState.IDLE:
 				self.handle_idle_state()
