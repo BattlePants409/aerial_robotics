@@ -82,7 +82,8 @@ class MissionManager:
 		# Log distance periodically
 		current_time = rospy.Time.now().to_sec()
 		if int(current_time) % 5 == 0 and current_time % 1 < 0.1:
-			rospy.loginfo("Distance to target: %.2f, Tolerance: %.2f" %(dist ** 0.5, self.target_tolerance))
+			rospy.loginfo("Current target: (%.2f, %.2f, %.2f)" % (tx, ty, tz))
+			rospy.loginfo("Distance to target: %.2fm" % dist)
 
 		return False
 
@@ -113,12 +114,18 @@ class MissionManager:
 			self.drone.publish_position(0, 0, 0)
 			self.rate.sleep()
 
+	def change_state(self, new_state, msg=""):
+		"""Change the current state and log the transition"""
+		if new_state != self.current_state:
+			rospy.loginfo("State changed from %s to %s: %s" % (self.current_state.name, new_state.name, msg))
+			self.current_state = new_state
+			self.target_reached = False
+
 	def handle_idle_state(self):
 		"""Handle the IDLE state - set the flight mode"""
 
 		if self.drone.set_mode("GUIDED"):
-			rospy.loginfo("GUIDED mode accepted, moving to ARMING")
-			self.current_state = MissionState.ARMING
+			self.change_state(MissionState.ARMING, "GUIDED mode set")
 		else:
 			rospy.logwarn("Failed to set GUIDED mode, retrying...")
 			self.rate.sleep()
@@ -136,12 +143,11 @@ class MissionManager:
 		"""Handle the TAKEOFF state - takeoff to target altitude"""
 
 		if not self.drone.is_armed():
-			rospy.logwarn("Vehicle disarmed, returning to ARMING")
-			self.current_state = MissionState.ARMING
+			self.change_state(MissionState.ARMING, "Disarmed, returning to ARMING")
+			return
 
 		elif self.target_reached:
-			rospy.loginfo("Takeoff complete, moving to NAVIGATE")
-			self.current_state = MissionState.NAVIGATE
+			self.change_state(MissionState.NAVIGATE, "Takeoff complete")
 
 		elif self.current_target is None:
 			self.set_target_position(0, 0, self.takeoff_height, tolerance=0.5)
@@ -151,13 +157,13 @@ class MissionManager:
 			else:
 				self.current_target = None
 				rospy.logwarn("Takeoff rejected, retrying...")
+				self.rate.sleep()
 
 	def handle_navigate_state(self):
 		"""Handle the NAVIGATE state - fly to GPS target"""
 
 		if self.target_reached:
-			rospy.loginfo("GPS target reached, moving to LANDING")
-			self.current_state = MissionState.LANDING
+			self.change_state(MissionState.LANDING, "Navigation complete")
 
 		elif self.current_target is None:
 			x, y, z = self.gps_position
