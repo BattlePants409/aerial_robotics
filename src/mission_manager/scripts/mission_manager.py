@@ -1,4 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
 import rospy
 from enum import Enum
 from geometry_msgs.msg import PoseStamped, TwistStamped
@@ -87,16 +89,18 @@ class MissionManager:
 		cmd.twist.angular.z = -self.pid["yaw"] * self.tag_error["yaw"]
 		self.vel_pub.publish(cmd)
 
-	def reached_altitude(self, target_z, tol=0.2):
-		if self.current_pose is None:
+	def reached_target(self, tol=0.5):
+		if self.current_pose is None or self.target_pose is None:
 			return False
-		return abs(self.current_pose.position.z - target_z) < tol
 
-	def reached_position(self, tx, ty, tol=0.5):
-		if self.current_pose is None:
-			return False
-		cx, cy = self.current_pose.position.x, self.current_pose.position.y
-		return abs(cx - tx) < tol and abs(cy - ty) < tol
+		dx = self.current_pose.position.x - self.target_pose.pose.position.x
+		dy = self.current_pose.position.y - self.target_pose.pose.position.y
+		dz = self.current_pose.position.z - self.target_pose.pose.position.z
+
+		# Squared distance compared to squared tolerance to avoid sqrt every time
+		dist = dx * dx + dy * dy + dz * dz
+		print("Distance to target:", dist, "Tolerance:", tol * tol)
+		return dist < tol * tol
 
 	def set_mode(self, mode):
 		self.set_mode_client(base_mode=0, custom_mode=mode)
@@ -108,9 +112,11 @@ class MissionManager:
 			self.rate.sleep()
 		rospy.loginfo("Connected to FCU.")
 
+		rospy.loginfo("Waiting for GPS fix...")
 		for _ in range(100):
 			self.publish_position(0, 0, self.takeoff_height)
 			self.rate.sleep()
+		rospy.loginfo("GPS fix acquired.")
 
 		self.set_mode("OFFBOARD")
 		self.arming_client(True)
@@ -122,20 +128,19 @@ class MissionManager:
 
 			elif self.current_state == MissionState.TAKEOFF:
 				self.publish_position(0, 0, self.takeoff_height)
-				if self.reached_altitude(self.takeoff_height):
+				if self.reached_target():
 					rospy.loginfo("Reached takeoff height → NAVIGATE")
 					self.current_state = MissionState.NAVIGATE
 
 			elif self.current_state == MissionState.NAVIGATE:
 				x, y = self.gps_position
-				self.publish_position(x, y, self.takeoff_height)
-				if self.reached_position(x, y):
+				self.publish_position(x, y, 60)
+				if self.reached_target(2):
 					rospy.loginfo("Reached GPS target → LANDING")
 					self.current_state = MissionState.LANDING
 
 			elif self.current_state == MissionState.LANDING:
 				if self.tag_visible:
-					self.set_mode("QLOITER")
 					self.publish_velocity()
 				else:
 					rospy.loginfo("Tag lost — switching to QLAND")
