@@ -4,8 +4,8 @@
 		type="mission_manager.py"
 		output="screen"
 		ns="minihawk_SIM">
-	<param name="takeoff_height" value="3.0" />
+	<param name="takeoff_height" value="10.0" />
 	<param name="landing_height" value="0.0" />
-	<param name="gps_position" value="[10.0, 5.0]" />
+	<param name="gps_position" value="[-50, 750.0]" type="yaml" />
   </node>
 </launch>
