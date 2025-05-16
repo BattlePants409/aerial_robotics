@@ -7,6 +7,9 @@ from geometry_msgs.msg import PoseStamped, TwistStamped
 from mavros_msgs.msg import State, ExtendedState
 from mavros_msgs.srv import CommandBool, SetMode, CommandTOL
 from apriltag_ros.msg import AprilTagDetectionArray
+from mavros_msgs.msg import OverrideRCIn
+
+
 
 class DroneController:
 	"""Handles ROS-based interactions with the drone hardware"""
@@ -19,6 +22,8 @@ class DroneController:
 		self.current_pose = None
 		self.arm_time = None
 		self.mode_set_time = None
+		self.override_pub = rospy.Publisher("/mavros/rc/override", OverrideRCIn, queue_size=10)
+
 
 		# MAVROS connections
 		rospy.Subscriber("mavros/state", State, self.state_cb)
@@ -179,3 +184,22 @@ class DroneController:
 		dz = z - self.current_pose.position.z
 
 		return (dx*dx + dy*dy + dz*dz) ** 0.5
+	
+	def get_tag_offset(self):
+		"""
+		Return the AprilTag position error (x, y, z) in drone's local frame.
+		"""
+		if not self.tag_visible:
+			return None
+		return (
+			self.tag_error["x"],
+			self.tag_error["y"],
+			self.tag_error["z"]
+    	)
+	def disable_manual_input(self):
+		"""Continuously publish zeroed RC override to disable 'manual_input' blocking control"""
+		msg = OverrideRCIn()
+		msg.channels = [0] * 8  # 0 = "no override", disables manual input
+		self.override_pub.publish(msg)
+
+

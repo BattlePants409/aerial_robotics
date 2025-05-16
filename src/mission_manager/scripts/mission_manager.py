@@ -217,7 +217,9 @@ class MissionManager:
 		self.send_initial_setpoints()
 
 		while not rospy.is_shutdown() and self.current_state != MissionState.COMPLETE:
+			self.drone.disable_manual_input()
 			self.update_target_status()
+		
 
 			if self.current_state == MissionState.IDLE:
 				self.handle_idle_state()
