@@ -172,19 +172,36 @@ class MissionManager:
 			self.current_state = MissionState.COMPLETE
 			return
 
-		altitude = self.drone.get_current_altitude()
-		if altitude is None:
-			rospy.logwarn("Unable to get altitude, using default landing behavior")
-			self.drone.publish_velocity()
+		tag_offset = self.drone.get_tag_offset()
+		if tag_offset is None:
+			rospy.logwarn("Tag offset not available, hovering...")
+			self.drone.publish_velocity(0, 0, 0)
 			return
 
-		descend_rate = min(-0.2, -0.4 * (altitude / self.takeoff_height))
-		self.drone.publish_velocity(None, None, descend_rate)
+		x_err, y_err, z_err = tag_offset
+		altitude = self.drone.get_current_altitude()
 
-		if altitude < self.landing_height:
-			rospy.loginfo("Landed successfully at height: %.2fm" % altitude)
+		if altitude is None:
+			rospy.logwarn("Unable to get altitude, hovering...")
+			self.drone.publish_velocity(0, 0, 0)
+			return
+
+    	# Calculate descent rate based on altitude
+		descend_rate = min(-0.2, -0.4 * (altitude / self.takeoff_height))
+
+    	# Simple proportional control to center over tag
+		vx = -0.3 * x_err
+		vy = -0.3 * y_err
+		vz = descend_rate
+
+		self.drone.publish_velocity(vx, vy, vz)
+
+    	# Landing condition
+		if abs(x_err) < 0.1 and abs(y_err) < 0.1 and altitude < self.landing_height:
+			rospy.loginfo("Landed successfully over tag")
 			self.drone.set_mode("LAND")
 			self.current_state = MissionState.COMPLETE
+
 
 	def run_mission(self):
 		"""Main mission execution loop"""
