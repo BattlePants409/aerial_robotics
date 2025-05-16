@@ -197,9 +197,9 @@ class DroneController:
 			self.tag_error["z"]
     	)
 	def disable_manual_input(self):
-		"""Continuously publish zeroed RC override to disable 'manual_input' blocking control"""
+		"""Force manual_input to False by publishing non-overriding RC override"""
 		msg = OverrideRCIn()
-		msg.channels = [0] * 8  # 0 = "no override", disables manual input
+		msg.channels = [65535] * 8  # 0 = "no override", disables manual input
 		self.override_pub.publish(msg)
 
 
